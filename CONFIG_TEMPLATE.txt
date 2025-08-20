@@ -1,0 +1,6 @@
+unsorted folder: 
+sorted folder: 
+username: 
+api key: 
+URL:
+priority tags:
