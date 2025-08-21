@@ -77,14 +77,13 @@ def trimCopyright(file):
             impCR.append(relation['cons'])
             # print(f'tag {relation['cons']} removed with hindsight.')
     
-    # return the data if its sufficient (so it doesnt have to get tag data every time)
+    # return the data if this is sufficient (so it doesnt have to get tag data every time)
     if len(crlist) <= 1:
         file['copyright'] = crlist
         return file
     
     # plan C: find data for tag implications, remove dependant tags
     # convert the list to text for search
-    #print(f'new list: {crlist}')
     crlistTXT = ''
     for copyright in crlist:
         crlistTXT = crlistTXT + "," + copyright
@@ -315,10 +314,8 @@ for file in dataTable:
 print('cleaning up tag data...')
 hindsight = []
 for file in dataTable:
-    if len(file['artist']) > 1:
-        trimArtists(file)
-    if len(file['copyright']) > 1:
-        trimCopyright(file)
+    trimArtists(file)
+    trimCopyright(file)
     print(f'Copyright tags for post #{file['ID']}: {file['copyright']}')
 # print(hindsight)
 
