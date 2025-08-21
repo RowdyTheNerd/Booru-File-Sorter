@@ -1,8 +1,7 @@
 # Booru-File-Sorter
 a program for sorting files downloaded from image boorus. Written for e926 and related sites specifically.
-v1.0.1 
 updated aug 20, 2025
-created by Dyst 
+created by RowdyTheNerd @ github
 
 Hello! thanks for checking out the python script ive been working on. 
 
@@ -37,7 +36,7 @@ This program is designed to take a folder containing images downloaded from cert
 - your API key (to find yours, log in to your account and go to settings, and it should be under "general".)
 - the URL of the website which hosts the images and their data, without including the https:// or anything after the ".net".
 - the 'priority tags'. when the program is deciding which folder to place a file in, it will first check the tags listed here before moving on and looking for any more info. tags should be listed 1 per line underneath the priority tags header.
-![a notepad window displaying a filled out config file. The unsorted folder is listed as "pics2sort", while the sorted folder is listed as "sortedPics". The username is "my-e926-username"and the api key is a string of random characters, "abc123xyz". the website URL is "e926.net", and the priority tags are listed below the words "priority tags", rather than on the same line.](CONFIG_EXAMPLE.png "CONFIG example")
+![a notepad window displaying a filled out config file. The unsorted folder is listed as "pics2sort", while the sorted folder is listed as "sortedPics". The username is "my-e926-username"and the api key is a string of random characters, "abc123xyz". the website URL is "e926.net", and the priority tags are listed below the words "priority tags", rather than on the same line.](CONFIG_example.png "CONFIG example")
 3. once this info is in the config file, hit save, and then create a copy of the file called 'CONFIG.txt'. 
 4. open the python script (booruSorter.py) in an IDE, and hit 'run'. 
 5. after a few seconds (or minutes, depending on the size of your stash), the files should be copied into organized subfolders within the sorted folder specified in the config file. the script will give updates in the terminal as it runs. 
