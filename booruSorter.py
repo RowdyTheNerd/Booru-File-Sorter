@@ -15,7 +15,7 @@ import sys
 def validate(fileName):
     #validate file name
     if '.' not in fileName:
-        print(f'\tfile name \'{fileName}\'invalid: no extension found. ID set to 0')
+        print(f'\tfile name \'{fileName}\'　invalid: no extension found. ID set to 0')
         return False
     #validate that it matches template
     if '-' not in fileName:
@@ -23,6 +23,12 @@ def validate(fileName):
         return False
     return True
     
+# isolate the file name from the address
+def isolateName(address):
+    split = address.split('\\')
+    name = split[-1]
+    return name 
+
 # ISOLATE ID function
 def isolateID(fileName):
     if validate(fileName) == False:
@@ -121,7 +127,7 @@ def trimCopyright(file):
 # function which decides what folder to put it in
 def locator(file):
     # plan A: check special cases
-    if file['ID'] == 0:
+    if file['id'] == 0:
         print(f'\tID is invalid. Defaulting to unknown folder.')
         return 'unknown'
     for tag in priorityTags:
@@ -168,17 +174,21 @@ def countFiles(directoryPath):
         return 0
 
 # generate a list of addresses for all files in a folder
-def listAllFiles(unsortedFolder):
+def listAddresses(unsortedFolder):
+    # list all the files in the folder
     currentList = os.listdir(unsortedFolder)
-    #print(f'current list: {currentList}')
     finalList = []
-    for file in currentList:    
+    for file in currentList: 
+        # join the addresses
         address = os.path.join(unsortedFolder,file)
         #print(f'address: {address}')
+        # if its a folder, add contents to final list
         if os.path.isdir(address):
-            finalList.append(listAllFiles(address))
+            for subAddress in listAddresses(address):
+                finalList.append(subAddress)
+        # otherwise just add it to the list
         else:
-            finalList.append(file)
+            finalList.append(address)
             #print(f'adding {file}')
     return finalList
 
@@ -189,6 +199,19 @@ def checker(destination):
     for char in charsToRemove:
         newDes = newDes.replace(char, '')
     return newDes
+
+#create a grouping of the files
+def groupFiles(dataTable, groupSize):
+    tempRow = []
+    dataTable2D = []
+    for index, file in enumerate(dataTable):
+        tempRow.append(file)
+        if (index % groupSize == groupSize - 1):
+            dataTable2D.append(tempRow)
+            tempRow = []
+    dataTable2D.append(tempRow)
+    return dataTable2D
+
 
 
 # MAIN BODY OF CODE
@@ -238,34 +261,32 @@ if not os.path.exists(sortedFolder):
     print(f'Folder \'{sortedFolder}\' created.')
 
 # list addresses for all files in the folder to be sorted
-fileNames = listAllFiles(unsortedFolder)
+fileAddresses = listAddresses(unsortedFolder)
 
 # create table for storing data
 print('isolating IDs...')
-dataTable = [{'name': name, 'ID': isolateID(name)} for name in fileNames]
+dataTable = [{'address': address} for address in fileAddresses]
+for file in dataTable:
+    file['name'] = isolateName(file['address'])
+    file['id'] = isolateID(file['name'])
+
+#for file in dataTable:
+#    print('ad: ' + file['address'] + ', nm: ' + file['name'] + ', id: ' +str(file['id']))
 
 # group files 
 # i can search "~id:123 ~id:124" to get both to come up; taking advantage of this for speed
 groupSize = 40
-tempRow = []
-dataTable2D = []
-for index, file in enumerate(dataTable):
-    tempRow.append(file)
-    if (index % groupSize == groupSize - 1):
-        dataTable2D.append(tempRow)
-        tempRow = []
-dataTable2D.append(tempRow)
+dataTable2D = groupFiles(dataTable, groupSize)
 
 #retrieve data for a group of files
 print('retrieving tag data...')
 deletedFiles = []
 header = {'user-agent': 'booru file sorter WIP (by horny_pan_boi_uwu on e926)'}
 for index, group in enumerate(dataTable2D):
-    #print(f'Retrieving data for group {index}')
     # create search string
     searchString = ''
     for file in group:
-        searchString = searchString + '~id:' + str(file['ID']) + ' '
+        searchString = searchString + '~id:' + str(file['id']) + ' '
     # find info for file
     postURL = 'https://' + URL + '/posts.json'
     tags = {'tags': searchString}
@@ -274,7 +295,7 @@ for index, group in enumerate(dataTable2D):
     for file in group:
         hasMatch = False
         for post in allData:
-            if post['id'] == file['ID']:
+            if post['id'] == file['id']:
                 hasMatch = True
                 # extract important info and add to table
                 tags = post['tags']
@@ -282,17 +303,16 @@ for index, group in enumerate(dataTable2D):
                 file['tags'] = tags['general'] + tags['character'] + tags['species'] + tags['meta']
                 file['copyright'] = tags['copyright']
         if hasMatch == False:
-            print(f'post #{file['ID']} was (probably) deleted from the servers.')
+            print(f'post #{file['id']} was (probably) deleted from the servers.')
             deletedFiles.append(file)
-
 
 # retrieve tag data for a single file
 print('retrieving data for deleted files...')
 for file in deletedFiles:
     # find info for file
-    print(f'Data for post #{file['ID']} found!')
-    if file['ID'] != 0:
-        postURL = 'https://' + URL + '/posts/' + str(file['ID']) + '.json'
+    print(f'Data for post #{file['id']} found!')
+    if file['id'] != 0:
+        postURL = 'https://' + URL + '/posts/' + str(file['id']) + '.json'
         response = requests.get(postURL, headers=header, auth=(username,api_key))
         allTags = json.loads(response.text)['post']['tags']
         # extract important info and add to table
@@ -304,11 +324,9 @@ for file in deletedFiles:
         file['tags'] = 'none'
         file['copyright'] = 'none'
 
-
 #create an implied copyright section for each file
 for file in dataTable:
     file['impliedCopyright'] = []
-
 
 # get tags cleaned up
 print('cleaning up tag data...')
@@ -316,19 +334,18 @@ hindsight = []
 for file in dataTable:
     trimArtists(file)
     trimCopyright(file)
-    print(f'Copyright tags for post #{file['ID']}: {file['copyright']}')
+    print(f'Copyright tags for post #{file['id']}: {file['copyright']}')
 # print(hindsight)
 
 # find a place for each post
 for file in dataTable:
     file['destination'] = locator(file)
 
-
 # get file sorted away
 print('sorting files...')
 for file in dataTable:
     print(f'Sorting file {file['name']}')
-    startPath = os.path.join(unsortedFolder, file['name'])
+    startPath = file['address']
     destinationPath = os.path.join(sortedFolder, file['destination'])
     endPath = os.path.join(destinationPath, file['name'])
     if not os.path.exists(destinationPath):
