@@ -9,19 +9,8 @@ import shutil
 import sys
 
 
-# FUNCTIONS
 
-# validate file name function
-def validate(fileName):
-    #validate file name
-    if '.' not in fileName:
-        print(f'\tfile name \'{fileName}\'　invalid: no extension found. ID set to 0')
-        return False
-    #validate that it matches template
-    if '-' not in fileName:
-        print(f'\tfile name \'{fileName}\' invalid: no separator found. ID set to 0.')
-        return False
-    return True
+# FUNCTIONS
     
 # isolate the file name from the address
 def isolateName(address):
@@ -29,25 +18,47 @@ def isolateName(address):
     name = split[-1]
     return name 
 
-# ISOLATE ID function
-def isolateID(fileName):
-    if validate(fileName) == False:
-        return 0
-    # split the name by dots and dashes
-    split = fileName.replace('.','-').split('-')
-    # delete the strings that defenitely aren't the ID
-    goodItems = []
-    for string in split:
-        if string.isdigit():
-            goodItems.append(string)
-    if len(goodItems) == 1:
-        ID = int(goodItems[0])
-    else:
-        # print(f'multiple or 0. ({goodItems})')
-        ID = max(int(goodItems[0]))
-    return ID
+# remove file extensions
+def removeExt(fileName):
+    extList = ('.webm','.jpg','.mp4','.png','.gif',
+               '.WEBM','.JPG','.MP4','.PNG','.GIF')
+    for extension in extList:
+        fileName = fileName.replace(extension,'')
+    return fileName
 
-# trim artists: clean up the artist list, hopefully narrows it down to 1. 
+# identify the id format
+def formatIdentifier(fileName):
+    # remove extension
+    rawName = removeExt(fileName)
+    # if the length is 32 and its hex, its definitely md5
+    if (len(rawName) == 32) & (all(c in '0123456789abcdefABCDEF' for c in rawName)):
+        return 'md5'
+    # if there is a dash and an ID number at the end, most likely id
+    if ('-' in rawName) & (rawName.split('-')[-1].isdigit()):
+        # and make sure the number is big, not a date or smthn
+        if int(rawName.split('-')[-1]) > 59:
+            return 'id'
+    # else: youre probably a redneck
+    else: 
+        return 'unknown'
+
+# ISOLATE MD5 
+def isolateMD5(fileName):
+    rawName = removeExt(fileName)
+    return rawName
+
+# ISOLATE ID 
+def isolateID(fileName):
+    # remove extension(s)
+    rawName = removeExt(fileName)
+    # split the name by dashes
+    split = rawName.split('-')
+    if split[-2].isdigit():
+        return split[-2]
+    else:
+        return split[-1]
+
+# clean up the artist list, hopefully narrow it down to 1. 
 def trimArtists(file):
     artistList = file['artist']
     # clean up extra artist tags
@@ -119,16 +130,18 @@ def trimCopyright(file):
             nonImpliedTags.append(tag)
     #print(nonImpliedTags)
     crlist = nonImpliedTags
-
     file['copyright'] = crlist
     file['impliedCopyright'] = impCR
     return file
 
-# function which decides what folder to put it in
+# decide what folder to put the file in
 def locator(file):
     # plan A: check special cases
     if file['id'] == 0:
         print(f'\tID is invalid. Defaulting to unknown folder.')
+        return 'unknown'
+    if file['id'] == '':
+        print(f'\tno ID found. Defaulting to unknown folder.')
         return 'unknown'
     for tag in priorityTags:
         if tag in file['tags']:
@@ -200,11 +213,11 @@ def checker(destination):
         newDes = newDes.replace(char, '')
     return newDes
 
-#create a grouping of the files
-def groupFiles(dataTable, groupSize):
+#group files together to send all at once
+def groupFiles(idTable, groupSize):
     tempRow = []
     dataTable2D = []
-    for index, file in enumerate(dataTable):
+    for index, file in enumerate(idTable):
         tempRow.append(file)
         if (index % groupSize == groupSize - 1):
             dataTable2D.append(tempRow)
@@ -264,25 +277,42 @@ if not os.path.exists(sortedFolder):
 fileAddresses = listAddresses(unsortedFolder)
 
 # create table for storing data
-print('isolating IDs...')
+print('\nisolating IDs...')
 dataTable = [{'address': address} for address in fileAddresses]
 for file in dataTable:
     file['name'] = isolateName(file['address'])
-    file['id'] = isolateID(file['name'])
+    file['nameFormat'] = formatIdentifier(file['name'])
+    if file['nameFormat'] == 'id':
+        file['md5'] = ''
+        file['id'] = isolateID(file['name'])
+    elif file['nameFormat'] == 'md5':
+        file['md5'] = isolateMD5(file['name'])
+        file['id'] = ''
+    else:
+        file['md5'] = ''
+        file['id'] = ''
 
-#for file in dataTable:
-#    print('ad: ' + file['address'] + ', nm: ' + file['name'] + ', id: ' +str(file['id']))
+# split into multiple tables
+idTable = []
+md5Table = []
+otherTable = []
+for file in dataTable:
+    if file['nameFormat'] == 'id':
+        idTable.append(file)
+    elif file['nameFormat'] == 'md5':
+        md5Table.append(file)
+    else:
+        otherTable.append(file)
 
-# group files 
-# i can search "~id:123 ~id:124" to get both to come up; taking advantage of this for speed
+# group ID files 
 groupSize = 40
-dataTable2D = groupFiles(dataTable, groupSize)
+idTable2D = groupFiles(idTable, groupSize)
 
-#retrieve data for a group of files
-print('retrieving tag data...')
+#retrieve data for a group of id files
+print('\nretrieving tag data for ID files...')
 deletedFiles = []
 header = {'user-agent': 'booru file sorter WIP (by horny_pan_boi_uwu on e926)'}
-for index, group in enumerate(dataTable2D):
+for group in idTable2D:
     # create search string
     searchString = ''
     for file in group:
@@ -303,33 +333,55 @@ for index, group in enumerate(dataTable2D):
                 file['tags'] = tags['general'] + tags['character'] + tags['species'] + tags['meta']
                 file['copyright'] = tags['copyright']
         if hasMatch == False:
-            print(f'post #{file['id']} was (probably) deleted from the servers.')
+            print(f'post {file['name']} was (probably) deleted from the servers.')
             deletedFiles.append(file)
 
-# retrieve tag data for a single file
-print('retrieving data for deleted files...')
-for file in deletedFiles:
+# retrieve tag data for a singular md5 file
+print('\nretrieving data for md5 files...')
+for file in md5Table:
     # find info for file
-    print(f'Data for post #{file['id']} found!')
-    if file['id'] != 0:
-        postURL = 'https://' + URL + '/posts/' + str(file['id']) + '.json'
-        response = requests.get(postURL, headers=header, auth=(username,api_key))
-        allTags = json.loads(response.text)['post']['tags']
+    postURL = 'https://' + URL + '/posts.json'
+    md5search = 'md5:' + file['md5']
+    tags = {'tags': md5search}
+    response = requests.get(postURL, headers=header, auth=(username,api_key), params=tags)
+    if json.loads(response.text)['posts'] == []:
+        print(f'md5 string {file['md5']} does not match any posts.')
+        file['artist'] = ''
+        file['tags'] = ''
+        file['copyright'] = ''
+    else:    
         # extract important info and add to table
+        allInfo = json.loads(response.text)['posts'][0]
+        file['id'] = allInfo['id']
+        allTags = allInfo['tags']
         file['artist'] = allTags['artist']
         file['tags'] = allTags['general'] + allTags['character'] + allTags['species'] + allTags['meta']
         file['copyright'] = allTags['copyright']
-    else:
-        file['artist'] = 'none'
-        file['tags'] = 'none'
-        file['copyright'] = 'none'
+
+# retrieve tag data for a singular ID file
+print('\nretrieving data for deleted files...')
+for file in deletedFiles:
+    # find info for file
+    postURL = 'https://' + URL + '/posts/' + str(file['id']) + '.json'
+    response = requests.get(postURL, headers=header, auth=(username,api_key))
+    allTags = json.loads(response.text)['post']['tags']
+    # extract important info and add to table
+    file['artist'] = allTags['artist']
+    file['tags'] = allTags['general'] + allTags['character'] + allTags['species'] + allTags['meta']
+    file['copyright'] = allTags['copyright']
+
+# deal with the edge cases
+for file in otherTable:
+    file['artist'] = ''
+    file['tags'] = ''
+    file['copyright'] = ''
 
 #create an implied copyright section for each file
 for file in dataTable:
     file['impliedCopyright'] = []
 
 # get tags cleaned up
-print('cleaning up tag data...')
+print('\ncleaning up tag data...')
 hindsight = []
 for file in dataTable:
     trimArtists(file)
@@ -342,7 +394,7 @@ for file in dataTable:
     file['destination'] = locator(file)
 
 # get file sorted away
-print('sorting files...')
+print('\nsorting files...')
 for file in dataTable:
     print(f'Sorting file {file['name']}')
     startPath = file['address']
@@ -370,4 +422,4 @@ elif fileCount2 == fileCount1:
     print('all files transferred successfully. thanks for using the program!')
     # get user input
 else:
-    print('something went wrong, and there are now more files in the new folder. woops!')
+    print('the number of files increased. Either one folder was sorted into another, or something has gone horribly wrong. whoops!')
